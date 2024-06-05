@@ -1,22 +1,27 @@
+print("Dont forget to set CUDA_VISIBLE_DEVICES")
+from model import TubeViTLightningModule
 import os
 import pickle
 
 import click
 import lightning.pytorch as pl
 import matplotlib.pyplot as plt
-from lightning.pytorch.loggers import TensorBoardLogger
-from pytorchvideo.transforms import Normalize, Permute, RandAugment
+from lightning.pytorch.loggers import WandbLogger
+#from pytorchvideo.transforms import Normalize, Permute, RandAugment
 from torch.utils.data import DataLoader
 from torchvision.transforms import transforms as T
 from torchvision.transforms._transforms_video import ToTensorVideo
+import torch
+from dataset import MyUCF101
 
-from tubevit.dataset import MyUCF101
-from tubevit.model import TubeViTLightningModule
-
+import wandb
+    
 
 @click.command()
 @click.option("-r", "--dataset-root", type=click.Path(exists=True), required=True, help="path to dataset.")
 @click.option("-a", "--annotation-path", type=click.Path(exists=True), required=True, help="path to dataset.")
+# @click.option("--device", type=str, required=True, help="which gpu to use[0-7]")
+
 @click.option("-nc", "--num-classes", type=int, default=101, help="num of classes of dataset.")
 @click.option("-b", "--batch-size", type=int, default=32, help="batch size.")
 @click.option("-f", "--frames-per-clip", type=int, default=32, help="frame per clip.")
@@ -26,6 +31,9 @@ from tubevit.model import TubeViTLightningModule
 @click.option("--fast-dev-run", type=bool, is_flag=True, show_default=True, default=False)
 @click.option("--seed", type=int, default=42, help="random seed.")
 @click.option("--preview-video", type=bool, is_flag=True, show_default=True, default=False, help="Show input video")
+
+
+
 def main(
     dataset_root,
     annotation_path,
@@ -41,17 +49,12 @@ def main(
 ):
     pl.seed_everything(seed)
 
-    imagenet_mean = [0.485, 0.456, 0.406]
-    imagenet_std = [0.229, 0.224, 0.225]
+
 
     train_transform = T.Compose(
         [
             ToTensorVideo(),  # C, T, H, W
-            Permute(dims=[1, 0, 2, 3]),  # T, C, H, W
-            RandAugment(magnitude=10, num_layers=2),
-            Permute(dims=[1, 0, 2, 3]),  # C, T, H, W
             T.Resize(size=video_size),
-            Normalize(mean=imagenet_mean, std=imagenet_std),
         ]
     )
 
@@ -59,11 +62,10 @@ def main(
         [
             ToTensorVideo(),
             T.Resize(size=video_size),
-            Normalize(mean=imagenet_mean, std=imagenet_std),
         ]
     )
 
-    train_metadata_file = "ucf101-train-meta.pickle"
+   
     train_precomputed_metadata = None
     if os.path.exists(train_metadata_file):
         with open(train_metadata_file, "rb") as f:
@@ -144,18 +146,18 @@ def main(
         mlp_dim=3072,
         lr=1e-4,
         weight_decay=0.001,
-        weight_path="tubevit_b_(a+iv)+(d+v)+(e+iv)+(f+v).pt",
+        weight_path=os.path.join("..","saved_weights","tubevit_b_(a+iv)+(d+v)+(e+iv)+(f+v).pt"),
         max_epochs=max_epochs,
     )
 
+    wandb_logger = WandbLogger(project="sparse_tubes", name="TubeViT")
     callbacks = [pl.callbacks.LearningRateMonitor(logging_interval="epoch")]
-    logger = TensorBoardLogger("logs", name="TubeViT")
 
     trainer = pl.Trainer(
         max_epochs=max_epochs,
         accelerator="auto",
         fast_dev_run=fast_dev_run,
-        logger=logger,
+        logger=wandb_logger,
         callbacks=callbacks,
     )
     trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
@@ -163,4 +165,8 @@ def main(
 
 
 if __name__ == "__main__":
-    main()
+    #torch.cuda.set_device(0)
+    
+    main()#"/data2/fhuemer/UCF101/UCF-101", 
+         #"/data2/fhuemer/UCF101/ucfTrainTestlist")        
+
