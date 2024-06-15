@@ -28,7 +28,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 
 @click.option("-nc", "--num-classes", type=int, default=55, help="num of classes of dataset.")
 @click.option("-b", "--batch-size", type=int, default=8, help="batch size.")
-@click.option("-m", "--max_number_frames", type=int, default=400, help="frame per clip.")
+@click.option("-m", "--max_number_frames", type=int, default=150, help="frame per clip.")
 @click.option("-v", "--video-size", type=click.Tuple([int, int]), default=(512, 424), help="Height and width of image.")
 @click.option("-s", "--presample", type=int, default=4, help="pre sample frames from video")
 @click.option("--strides", help="sampeling for tubes")
@@ -37,6 +37,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 @click.option("--fast-dev-run", type=bool, is_flag=True, show_default=True, default=False)
 @click.option("--seed", type=int, default=42, help="random seed.")
 @click.option("--preview-video", type=bool, is_flag=True, show_default=True, default=False, help="Show input video")
+@click.option("--use_pretrained", type=bool, is_flag=True, show_default=True, default=False, help="Weather to use pretrained encoder")
 
 def main(
     dataset_root,
@@ -51,6 +52,7 @@ def main(
     seed,
     preview_video,
     max_number_frames,
+    use_pretrained
 ):
     pl.seed_everything(seed)
     # wandb.init(project="sparse_tubes", 
@@ -143,20 +145,22 @@ def main(
     x, y = next(iter(train_dataloader))
     print(x.shape)
 
-
+    hidden_dim=768#//4
+    mlp_dim=3072#//4
 
     model = TubeViTLightningModule(
         num_classes=num_classes,
         video_shape=x.shape[1:],
-        num_layers=4,
-        num_heads=4,
-        hidden_dim=768//4,
-        mlp_dim=3072//4,
+        num_layers=12,
+        num_heads=12,
+        hidden_dim=hidden_dim,
+        mlp_dim=mlp_dim,
         lr=1e-4,
         weight_decay=0.001,
         weight_path=os.path.join("..","saved_weights","nc200_3color_channels.pt"),
         max_epochs=max_epochs,
         strides=strides,
+        use_pretrained=use_pretrained,
     )
 
     #get dictionary of arguments
@@ -166,7 +170,7 @@ def main(
 
     wandb_logger = WandbLogger(
         project="sparse_tubes", 
-        name="TubeViT_{batch_size}_{max_number_frames}_{presample}_{max_epochs}_{num_workers}",
+        name=f"TubeViT_{batch_size}_{max_number_frames}_{presample}_{max_epochs}_{num_workers}_{hidden_dim}_{mlp_dim}_{use_pretrained}",
         config=arguments_dict,)
 
     callbacks = [

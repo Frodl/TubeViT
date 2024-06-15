@@ -10,6 +10,8 @@ from torchmetrics.functional import accuracy, f1_score
 from torchvision.models.vision_transformer import EncoderBlock
 from typing_extensions import OrderedDict
 from positional_encoding import get_3d_sincos_pos_embed
+from torchvision.models import vit_b_16, vit_b_32
+
 
 
 
@@ -33,15 +35,25 @@ class Encoder(nn.Module):
         super().__init__()
         self.dropout = nn.Dropout(dropout)
         layers: OrderedDict[str, nn.Module] = OrderedDict()
-        for i in range(num_layers):
-            layers[f"encoder_layer_{i}"] = EncoderBlock(
-                num_heads,
-                hidden_dim,
-                mlp_dim,
-                dropout,
-                attention_dropout,
-                norm_layer,
-            )
+        if self.use_pretrained:
+            pre_trained_vit = vit_b_32(pretrained=True)
+            for i in range(num_layers):
+                layers[f"encoder_layer_{i}"] = pre_trained_vit.encoder.layers[i]
+        else:
+            for i in range(num_layers):
+                layers[f"encoder_layer_{i}"] = EncoderBlock(
+                    num_heads,
+                    hidden_dim,
+                    mlp_dim,
+                    dropout,
+                    attention_dropout,
+                    norm_layer,
+                )
+       
+
+
+        
+
         self.layers = nn.Sequential(layers)
         self.ln = norm_layer(hidden_dim)
 
@@ -138,6 +150,7 @@ class TubeViT(nn.Module):
         dropout: float = 0.0,
         attention_dropout: float = 0.0,
         representation_size=None,
+        use_pretrained=False,
     ):
         super(TubeViT, self).__init__()
         self.video_shape = np.array(video_shape)  # CTHW
@@ -149,6 +162,7 @@ class TubeViT(nn.Module):
         self.sparse_tubes_tokenizer = SparseTubesTokenizer(
             self.hidden_dim, self.kernel_sizes, self.strides, self.offsets
         )
+        self.use_pretrained = use_pretrained
 
         self.pos_embedding = self._generate_position_embedding()
         self.pos_embedding = torch.nn.Parameter(self.pos_embedding, requires_grad=False)
@@ -257,6 +271,7 @@ class TubeViTLightningModule(pl.LightningModule):
             (0, 0, 0),
         ),
         **kwargs,
+
     ):
 
         self.save_hyperparameters()
@@ -274,6 +289,7 @@ class TubeViTLightningModule(pl.LightningModule):
             kernel_sizes=kernel_sizes,
             strides=strides,
             offsets=offsets,
+            use_pretrained=use_pretrained,
         )
 
         self.lr = lr

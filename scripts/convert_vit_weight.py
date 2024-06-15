@@ -9,8 +9,8 @@ from model import TubeViT
 
 
 @click.command()
-@click.option("-nc", "--num-classes", type=int, default=101, help="num of classes of dataset.")
-@click.option("-f", "--frames-per-clip", type=int, default=32, help="frame per clip.")
+@click.option("-nc", "--num-classes", type=int, default=55, help="num of classes of dataset.")
+@click.option("-f", "--frames-per-clip", type=int, default=150, help="frame per clip.")
 @click.option("-v", "--video-size", type=click.Tuple([int, int]), default=(512, 424), help="frame per clip.")
 @click.option(
     "-o",
