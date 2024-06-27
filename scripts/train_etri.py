@@ -15,6 +15,9 @@ from torchvision.transforms._transforms_video import ToTensorVideo
 import torch
 from etri_dataloaders import ETRIDataset
 from custom_transformations import repeat_color_channel, min_max_normalization, ConvertToUint8, ConvertToFloat32, sample_frames
+from torchvision.models import ViT_B_16_Weights
+from torch.nn import functional as F
+
 
 import ast
 import wandb
@@ -38,6 +41,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 @click.option("--seed", type=int, default=42, help="random seed.")
 @click.option("--preview-video", type=bool, is_flag=True, show_default=True, default=False, help="Show input video")
 @click.option("--use_pretrained", type=bool, is_flag=True, show_default=True, default=False, help="Weather to use pretrained encoder")
+@click.option("--use_pretrained_conv", type=bool, is_flag=True, show_default=True, default=False, help="Weather to use pretrained encoder")
 
 def main(
     dataset_root,
@@ -52,8 +56,10 @@ def main(
     seed,
     preview_video,
     max_number_frames,
-    use_pretrained
+    use_pretrained,
+    use_pretrained_conv,
 ):
+    remove_background = False
     pl.seed_everything(seed)
     # wandb.init(project="sparse_tubes", 
     #            name="TubeViT_{batch_size}_{max_number_frames}_{sample}_{max_epochs}_{num_workers}",
@@ -68,8 +74,8 @@ def main(
 
     train_transform = T.Compose(
         [   min_max_normalization(scale_up=True),
-            ConvertToUint8(),
-            ToTensorVideo(),  # C, T, H, W
+            ConvertToFloat32(),
+            #ToTensorVideo(),  # C, T, H, W
             repeat_color_channel(), 
             sample_frames(nth=presample)
         ]
@@ -77,8 +83,8 @@ def main(
 
     test_transform = T.Compose(
         [   min_max_normalization(scale_up=True),
-            ConvertToUint8(), # if we first scale to [0,1] and then use uint8, we will get all zeros
-            ToTensorVideo(),  # C, T, H, W
+            ConvertToFloat32(), # if we first scale to [0,1] and then use uint8, we will get all zeros
+            #ToTensorVideo(),  # C, T, H, W
             repeat_color_channel(), 
             sample_frames(nth=presample)
         ]
@@ -93,7 +99,7 @@ def main(
     train_set =  ETRIDataset(
         root_dir=dataset_root,
         mode = "train",
-        remove_background=True,
+        remove_background=remove_background,
         transform=train_transform,
         single_camera=True,
         elders_only=True,
@@ -113,7 +119,7 @@ def main(
     val_set =  ETRIDataset(
         root_dir=dataset_root,
         mode = "val",
-        remove_background=True,
+        remove_background=remove_background,
         transform=test_transform,
         single_camera=True,
         elders_only=True,
@@ -161,16 +167,17 @@ def main(
         max_epochs=max_epochs,
         strides=strides,
         use_pretrained=use_pretrained,
+        use_pretrained_conv=use_pretrained_conv,
     )
 
-    #get dictionary of arguments
+    #get dictionary of arguments for name of wandb run
     frame = inspect.currentframe()
     args, _, _, values = inspect.getargvalues(frame)
     arguments_dict = {arg: values[arg] for arg in args}
 
     wandb_logger = WandbLogger(
         project="sparse_tubes", 
-        name=f"TubeViT_{batch_size}_{max_number_frames}_{presample}_{max_epochs}_{num_workers}_{hidden_dim}_{mlp_dim}_{use_pretrained}",
+        name=f"TubeViT_{batch_size}_{max_number_frames}_{presample}_{max_epochs}_{num_workers}_{hidden_dim}_{mlp_dim}_{use_pretrained}_{use_pretrained_conv}",
         config=arguments_dict,)
 
     callbacks = [
@@ -196,7 +203,30 @@ def main(
     )
     trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 
-    trainer.save_checkpoint("./models/tubevit_ucf101.ckpt")
+    #trainer.save_checkpoint("./models/tubevit_ucf101.ckpt")
+
+
+
+def convert_conv_weight(model):
+    weights = ViT_B_16_Weights.DEFAULT.get_state_dict(progress=True)
+
+    # inflated vit path convolution layer weight
+    conv_proj_weight = weights["conv_proj.weight"]
+    conv_proj_weight = F.interpolate(conv_proj_weight, (8, 8), mode="bilinear")
+    conv_proj_weight = torch.unsqueeze(conv_proj_weight, dim=2)
+    conv_proj_weight = conv_proj_weight.repeat(1, 1, 8, 1, 1)
+    conv_proj_weight = conv_proj_weight / 8.0
+
+    # remove missmatch parameters
+    weights.pop("encoder.pos_embedding")
+    weights.pop("heads.head.weight")
+    weights.pop("heads.head.bias")
+
+    model.load_state_dict(weights, strict=False)
+    model.sparse_tubes_tokenizer.conv_proj_weight = torch.nn.Parameter(conv_proj_weight, requires_grad=True)
+
+    return model
+
 
 
 if __name__ == "__main__":

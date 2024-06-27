@@ -11,6 +11,7 @@ from torchvision.models.vision_transformer import EncoderBlock
 from typing_extensions import OrderedDict
 from positional_encoding import get_3d_sincos_pos_embed
 from torchvision.models import vit_b_16, vit_b_32
+from torchvision.models import ViT_B_16_Weights
 
 
 
@@ -30,13 +31,14 @@ class Encoder(nn.Module):
         mlp_dim: int,
         dropout: float,
         attention_dropout: float,
+        use_pretrained=False,
         norm_layer: Callable[..., nn.Module] = partial(nn.LayerNorm, eps=1e-6),
     ):
         super().__init__()
         self.dropout = nn.Dropout(dropout)
         layers: OrderedDict[str, nn.Module] = OrderedDict()
-        if self.use_pretrained:
-            pre_trained_vit = vit_b_32(pretrained=True)
+        if use_pretrained:
+            pre_trained_vit = vit_b_16(pretrained=True)
             for i in range(num_layers):
                 layers[f"encoder_layer_{i}"] = pre_trained_vit.encoder.layers[i]
         else:
@@ -151,6 +153,7 @@ class TubeViT(nn.Module):
         attention_dropout: float = 0.0,
         representation_size=None,
         use_pretrained=False,
+        use_pretrained_conv=False,
     ):
         super(TubeViT, self).__init__()
         self.video_shape = np.array(video_shape)  # CTHW
@@ -162,6 +165,10 @@ class TubeViT(nn.Module):
         self.sparse_tubes_tokenizer = SparseTubesTokenizer(
             self.hidden_dim, self.kernel_sizes, self.strides, self.offsets
         )
+        if use_pretrained_conv:
+            self.convert_conv_weight()
+
+
         self.use_pretrained = use_pretrained
 
         self.pos_embedding = self._generate_position_embedding()
@@ -235,6 +242,24 @@ class TubeViT(nn.Module):
 
         position_embedding = torch.cat(position_embedding, dim=0).contiguous()
         return position_embedding
+    
+    def convert_conv_weight(self):
+        weights = ViT_B_16_Weights.DEFAULT.get_state_dict(progress=True)
+
+        # inflated vit path convolution layer weight
+        conv_proj_weight = weights["conv_proj.weight"]
+        conv_proj_weight = F.interpolate(conv_proj_weight, (8, 8), mode="bilinear")
+        conv_proj_weight = torch.unsqueeze(conv_proj_weight, dim=2)
+        conv_proj_weight = conv_proj_weight.repeat(1, 1, 8, 1, 1)
+        conv_proj_weight = conv_proj_weight / 8.0
+
+        # remove missmatch parameters
+        weights.pop("encoder.pos_embedding")
+        weights.pop("heads.head.weight")
+        weights.pop("heads.head.bias")
+
+        self.load_state_dict(weights, strict=False)
+        self.sparse_tubes_tokenizer.conv_proj_weight = torch.nn.Parameter(conv_proj_weight, requires_grad=True)
 
 
 class TubeViTLightningModule(pl.LightningModule):
@@ -270,6 +295,8 @@ class TubeViTLightningModule(pl.LightningModule):
             #(0, 16, 16),
             (0, 0, 0),
         ),
+        use_pretrained=False,
+        use_pretrained_conv=False,
         **kwargs,
 
     ):
