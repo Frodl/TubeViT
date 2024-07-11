@@ -13,8 +13,8 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import transforms as T
 from torchvision.transforms._transforms_video import ToTensorVideo
 import torch
-from etri_dataloaders import ETRIDataset
-from custom_transformations import repeat_color_channel, min_max_normalization, ConvertToUint8, ConvertToFloat32, sample_frames
+from mrs_dataloaders import MRSActivityDataset
+from custom_transformations import repeat_color_channel, min_max_normalization, ConvertToFloat32, sample_frames, PermuteDimensions
 from torchvision.models import ViT_B_16_Weights
 from torch.nn import functional as F
 
@@ -40,8 +40,8 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 @click.option("--fast-dev-run", type=bool, is_flag=True, show_default=True, default=False)
 @click.option("--seed", type=int, default=42, help="random seed.")
 @click.option("--preview-video", type=bool, is_flag=True, show_default=True, default=False, help="Show input video")
-@click.option("--use_pretrained", type=bool, is_flag=True, show_default=True, default=False, help="Weather to use pretrained encoder")
-@click.option("--use_pretrained_conv", type=bool, is_flag=True, show_default=True, default=False, help="Weather to use pretrained encoder")
+@click.option("--use_pretrained", type=bool, is_flag=True, show_default=True, default=False, help="Whether to use pretrained encoder")
+@click.option("--use_pretrained_conv", type=bool, is_flag=True, show_default=True, default=False, help="Whether to use pretrained encoder")
 
 def main(
     dataset_root,
@@ -59,76 +59,46 @@ def main(
     use_pretrained,
     use_pretrained_conv,
 ):
-    remove_background = False
     pl.seed_everything(seed)
-    # wandb.init(project="sparse_tubes", 
-    #            name="TubeViT_{batch_size}_{max_number_frames}_{sample}_{max_epochs}_{num_workers}",
-    #            config=locals(),)
-    import ast
 
     if strides is not None:
         strides = ast.literal_eval(strides)
 
-
+    train_transform = T.Compose(
+        [   min_max_normalization(), # also transforms to float64
+            ConvertToFloat32(), # reduce to float32 in order to save memory
+            PermuteDimensions((3, 0, 1, 2)),  # from (T, H, W, C) to (C, T, H, W)
+            repeat_color_channel(), 
+            sample_frames(nth=presample)
+        ]
+    )
     
 
-    train_transform = T.Compose(
-        [   min_max_normalization(scale_up=True),
-            ConvertToFloat32(),
-            #ToTensorVideo(),  # C, T, H, W
-            repeat_color_channel(), 
-            sample_frames(nth=presample)
-        ]
-    )
-
     test_transform = T.Compose(
-        [   min_max_normalization(scale_up=True),
-            ConvertToFloat32(), # if we first scale to [0,1] and then use uint8, we will get all zeros
-            #ToTensorVideo(),  # C, T, H, W
+        [   min_max_normalization(),
+            ConvertToFloat32(), 
+            PermuteDimensions((3, 0, 1, 2)),  # from (T, H, W, C) to (C, T, H, W)
             repeat_color_channel(), 
             sample_frames(nth=presample)
         ]
     )
 
-    # train_metadata_file = "placeholder_name.pickle"
-    # train_precomputed_metadata = None
-    # if os.path.exists(train_metadata_file):
-    #     with open(train_metadata_file, "rb") as f:
-    #         train_precomputed_metadata = pickle.load(f)
-
-    train_set =  ETRIDataset(
+    train_set =  MRSActivityDataset(
         root_dir=dataset_root,
         mode = "train",
-        remove_background=remove_background,
         transform=train_transform,
-        single_camera=True,
-        elders_only=True,
+        get_metadata=True,
         max_number_frames = max_number_frames,
     )
 
-    # if not os.path.exists(train_metadata_file):
-    #     with open(train_metadata_file, "wb") as f:
-    #         pickle.dump(train_set.metadata, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-    # val_metadata_file = "another_placeholder.pickle"
-    # val_precomputed_metadata = None
-    # if os.path.exists(val_metadata_file):
-    #     with open(val_metadata_file, "rb") as f:
-    #         val_precomputed_metadata = pickle.load(f)
 
-    val_set =  ETRIDataset(
+    val_set =  MRSActivityDataset(
         root_dir=dataset_root,
         mode = "val",
-        remove_background=remove_background,
         transform=test_transform,
-        single_camera=True,
-        elders_only=True,
         max_number_frames = max_number_frames,
     )
-
-    # if not os.path.exists(val_metadata_file):
-    #     with open(val_metadata_file, "wb") as f:
-    #         pickle.dump(val_set.metadata, f, protocol=pickle.HIGHEST_PROTOCOL)
 
     train_dataloader = DataLoader(
         train_set,
@@ -176,8 +146,8 @@ def main(
     arguments_dict = {arg: values[arg] for arg in args}
 
     wandb_logger = WandbLogger(
-        project="sparse_tubes", 
-        name=f"TubeViT_{batch_size}_{max_number_frames}_{presample}_{max_epochs}_{num_workers}_{hidden_dim}_{mlp_dim}_{use_pretrained}_{use_pretrained_conv}",
+        project="sparse_tubes_msr", 
+        name=f"TubeViT_minmaxscaling_no_scaleup_{batch_size}_{max_number_frames}_{presample}_{max_epochs}_{num_workers}_{hidden_dim}_{mlp_dim}_{use_pretrained}_{use_pretrained_conv}",
         config=arguments_dict,)
 
     callbacks = [
@@ -188,11 +158,6 @@ def main(
             dirpath='./model_checkpoints/',  # Specify the directory
         )
     ]
-
-        # wandb.init(project="sparse_tubes", 
-    #            name="TubeViT_{batch_size}_{max_number_frames}_{presample}_{max_epochs}_{num_workers}",
-    #            config=locals(),)
-
 
     trainer = pl.Trainer(
         max_epochs=max_epochs,

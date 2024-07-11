@@ -2,17 +2,17 @@
         "version": "0.2.0",
         "configurations": [ 
             {
-                "name": "Python Debugger: Current File", 
+                "name": "train msr", 
                 "type": "debugpy",
                 "request": "launch",
-                "program": "${workspaceFolder}/scripts/train_etri.py",
+                "program": "${workspaceFolder}/scripts/train_msr.py",
                 "console": "integratedTerminal",
-                "args": ["-r", "/data2/fhuemer/etri/masked_depthmaps",
+                "args": ["-r", "/data2/fhuemer/MSRActivity3D/data",
                          "-m", "150",
                         "--presample", "2",
                         "--strides", "((12, 32, 32),(64, 16, 16))"],
                 "env": {
-                    "CUDA_VISIBLE_DEVICES": "6"
+                    "CUDA_VISIBLE_DEVICES": "2"
                 }
             },
         {
@@ -24,7 +24,7 @@
             "args": ["--dataset-root", "/data2/fhuemer/UCF101/UCF-101",
                      "--annotation-path", "/data2/fhuemer/UCF101/ucfTrainTestlist"],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "6"
+                "CUDA_VISIBLE_DEVICES": "0"
             }
         }
     ]
