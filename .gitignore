@@ -4,3 +4,5 @@ scripts/wandb/
 ucf101/
 model_checkpoints/
 saved_weights/
+Tube_Vit/scripts/models
+scripts/models/tubevit_ucf101.ckpt
