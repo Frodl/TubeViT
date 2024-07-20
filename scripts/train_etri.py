@@ -14,7 +14,7 @@ from torchvision.transforms import transforms as T
 from torchvision.transforms._transforms_video import ToTensorVideo
 import torch
 from etri_dataloaders import ETRIDataset
-from custom_transformations import repeat_color_channel, min_max_normalization, ConvertToUint8, ConvertToFloat32, sample_frames
+from custom_transformations import repeat_color_channel, min_max_normalization, ConvertToUint8, ConvertToFloat32, sample_frames, PermuteDimensions
 
 import ast
 import wandb
@@ -52,42 +52,30 @@ def main(
     preview_video,
     max_number_frames,
 ):
-    remove_background = False
     pl.seed_everything(seed)
-    # wandb.init(project="sparse_tubes", 
-    #            name="TubeViT_{batch_size}_{max_number_frames}_{sample}_{max_epochs}_{num_workers}",
-    #            config=locals(),)
-    import ast
+    remove_background = False
 
     if strides is not None:
         strides = ast.literal_eval(strides)
 
-
+    train_transform = T.Compose(
+        [   #min_max_normalization(), # also transforms to float64
+            ConvertToFloat32(), # reduce to float32 in order to save memory
+            PermuteDimensions((3, 0, 1, 2)),  # from (T, H, W, C) to (C, T, H, W)
+            repeat_color_channel(), 
+            sample_frames(nth=presample)
+        ]
+    )
     
 
-    train_transform = T.Compose(
-        [   #min_max_normalization(scale_up=False),
-            ConvertToFloat32(),
-            #ToTensorVideo(),  # C, T, H, W
-            #repeat_color_channel(), 
-            sample_frames(nth=presample)
-        ]
-    )
-
     test_transform = T.Compose(
-        [   #min_max_normalization(scale_up=False),
-            ConvertToFloat32(), # if we first scale to [0,1] and then use uint8, we will get all zeros
-            #ToTensorVideo(),  # C, T, H, W
-            #repeat_color_channel(), 
+        [   #min_max_normalization(),
+            ConvertToFloat32(), 
+            PermuteDimensions((3, 0, 1, 2)),  # from (T, H, W, C) to (C, T, H, W)
+            repeat_color_channel(), 
             sample_frames(nth=presample)
         ]
     )
-
-    # train_metadata_file = "placeholder_name.pickle"
-    # train_precomputed_metadata = None
-    # if os.path.exists(train_metadata_file):
-    #     with open(train_metadata_file, "rb") as f:
-    #         train_precomputed_metadata = pickle.load(f)
 
     train_set =  ETRIDataset(
         root_dir=dataset_root,
@@ -99,15 +87,7 @@ def main(
         max_number_frames = max_number_frames,
     )
 
-    # if not os.path.exists(train_metadata_file):
-    #     with open(train_metadata_file, "wb") as f:
-    #         pickle.dump(train_set.metadata, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-    # val_metadata_file = "another_placeholder.pickle"
-    # val_precomputed_metadata = None
-    # if os.path.exists(val_metadata_file):
-    #     with open(val_metadata_file, "rb") as f:
-    #         val_precomputed_metadata = pickle.load(f)
 
     val_set =  ETRIDataset(
         root_dir=dataset_root,
@@ -118,10 +98,6 @@ def main(
         elders_only=True,
         max_number_frames = max_number_frames,
     )
-
-    # if not os.path.exists(val_metadata_file):
-    #     with open(val_metadata_file, "wb") as f:
-    #         pickle.dump(val_set.metadata, f, protocol=pickle.HIGHEST_PROTOCOL)
 
     train_dataloader = DataLoader(
         train_set,
@@ -168,7 +144,7 @@ def main(
 
     wandb_logger = WandbLogger(
         project="sparse_tubes", 
-        name=f"TubeViT_{batch_size}_{max_number_frames}_{presample}_{max_epochs}_{num_workers}_{hidden_dim}_{mlp_dim}_False_False",
+        name=f"TubeViT_NoMinMax_{batch_size}_{max_number_frames}_{presample}_{max_epochs}_{num_workers}_{hidden_dim}_{mlp_dim}_False_False",
         config=arguments_dict,)
 
     callbacks = [
@@ -179,11 +155,6 @@ def main(
             dirpath='./model_checkpoints/',  # Specify the directory
         )
     ]
-
-        # wandb.init(project="sparse_tubes", 
-    #            name="TubeViT_{batch_size}_{max_number_frames}_{presample}_{max_epochs}_{num_workers}",
-    #            config=locals(),)
-
 
     trainer = pl.Trainer(
         max_epochs=max_epochs,
