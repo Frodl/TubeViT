@@ -24,8 +24,6 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 
 @click.command()
 @click.option("-r", "--dataset-root", type=click.Path(exists=True), required=True, help="path to dataset.")
-
-
 @click.option("-nc", "--num-classes", type=int, default=55, help="num of classes of dataset.")
 @click.option("-b", "--batch-size", type=int, default=8, help="batch size.")
 @click.option("-m", "--max_number_frames", type=int, default=150, help="frame per clip.")
@@ -37,6 +35,8 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 @click.option("--fast-dev-run", type=bool, is_flag=True, show_default=True, default=False)
 @click.option("--seed", type=int, default=42, help="random seed.")
 @click.option("--preview-video", type=bool, is_flag=True, show_default=True, default=False, help="Show input video")
+@click.option("-c","--checkpoint_path", type=click.Path(exists=True), show_default=True, default=None)
+
 
 def main(
     dataset_root,
@@ -51,6 +51,7 @@ def main(
     seed,
     preview_video,
     max_number_frames,
+    checkpoint_path,
 ):
     pl.seed_everything(seed)
     remove_background = False
@@ -162,6 +163,7 @@ def main(
         fast_dev_run=fast_dev_run,
         logger=wandb_logger,
         callbacks=callbacks,
+        resume_from_checkpoint=checkpoint_path,
     )
     trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 
