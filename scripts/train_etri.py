@@ -42,6 +42,8 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 @click.option("--preview-video", type=bool, is_flag=True, show_default=True, default=False, help="Show input video")
 @click.option("--use_pretrained", type=bool, is_flag=True, show_default=True, default=False, help="Weather to use pretrained encoder")
 @click.option("--use_pretrained_conv", type=bool, is_flag=True, show_default=True, default=False, help="Weather to use pretrained encoder")
+@click.option("-c","--checkpoint_path", type=click.Path(exists=True), show_default=True, default=None)
+
 
 def main(
     dataset_root,
@@ -58,6 +60,7 @@ def main(
     max_number_frames,
     use_pretrained,
     use_pretrained_conv,
+    checkpoint_path,
 ):
     pl.seed_everything(seed)
     remove_background = False
@@ -171,6 +174,7 @@ def main(
         fast_dev_run=fast_dev_run,
         logger=wandb_logger,
         callbacks=callbacks,
+        resume_from_checkpoint=checkpoint_path,
     )
     trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 
