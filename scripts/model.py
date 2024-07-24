@@ -317,6 +317,7 @@ class TubeViTLightningModule(pl.LightningModule):
             strides=strides,
             offsets=offsets,
             use_pretrained=use_pretrained,
+            use_pretrained_conv=use_pretrained_conv
         )
 
         self.lr = lr

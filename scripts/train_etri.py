@@ -14,7 +14,8 @@ from torchvision.transforms import transforms as T
 from torchvision.transforms._transforms_video import ToTensorVideo
 import torch
 from etri_dataloaders import ETRIDataset
-from custom_transformations import repeat_color_channel, min_max_normalization, ConvertToUint8, ConvertToFloat32, sample_frames, PermuteDimensions
+from custom_transformations import repeat_color_channel, min_max_normalization, ConvertToUint8, ConvertToFloat32
+from custom_transformations import ConvertToFloat64, sample_frames, PermuteDimensions
 from torchvision.models import ViT_B_16_Weights
 from torch.nn import functional as F
 
@@ -27,8 +28,6 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 
 @click.command()
 @click.option("-r", "--dataset-root", type=click.Path(exists=True), required=True, help="path to dataset.")
-
-
 @click.option("-nc", "--num-classes", type=int, default=55, help="num of classes of dataset.")
 @click.option("-b", "--batch-size", type=int, default=8, help="batch size.")
 @click.option("-m", "--max_number_frames", type=int, default=150, help="frame per clip.")
@@ -41,9 +40,11 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 @click.option("--seed", type=int, default=42, help="random seed.")
 @click.option("--preview-video", type=bool, is_flag=True, show_default=True, default=False, help="Show input video")
 @click.option("--use_pretrained", type=bool, is_flag=True, show_default=True, default=False, help="Weather to use pretrained encoder")
-@click.option("--use_pretrained_conv", type=bool, is_flag=True, show_default=True, default=False, help="Weather to use pretrained encoder")
+@click.option("--use_pretrained_conv", type=bool, is_flag=True, show_default=True, default=False, help="Weather to use pretrained conv layer")
 @click.option("-c","--checkpoint_path", type=click.Path(exists=True), show_default=True, default=None)
-
+@click.option("--remove_background", type=bool, is_flag=True, show_default=True, default=False, help="Remove background from video")
+@click.option("--use_min_max", type=bool, is_flag=True, show_default=True, default=False, help="Use min max normalization")
+              
 
 def main(
     dataset_root,
@@ -61,16 +62,17 @@ def main(
     use_pretrained,
     use_pretrained_conv,
     checkpoint_path,
+    remove_background,
+    use_min_max,
 ):
     pl.seed_everything(seed)
-    remove_background = False
 
     if strides is not None:
         strides = ast.literal_eval(strides)
 
     train_transform = T.Compose(
         [   #min_max_normalization(), # also transforms to float64
-            ConvertToFloat32(), # reduce to float32 in order to save memory
+            ConvertToFloat64(), # reduce to float32 in order to save memory
             PermuteDimensions((3, 0, 1, 2)),  # from (T, H, W, C) to (C, T, H, W)
             repeat_color_channel(), 
             sample_frames(nth=presample)
@@ -80,7 +82,7 @@ def main(
 
     test_transform = T.Compose(
         [   #min_max_normalization(),
-            ConvertToFloat32(), 
+            ConvertToFloat64(), 
             PermuteDimensions((3, 0, 1, 2)),  # from (T, H, W, C) to (C, T, H, W)
             repeat_color_channel(), 
             sample_frames(nth=presample)
@@ -174,11 +176,9 @@ def main(
         fast_dev_run=fast_dev_run,
         logger=wandb_logger,
         callbacks=callbacks,
-        resume_from_checkpoint=checkpoint_path,
     )
-    trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
+    trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader, ckpt_path=checkpoint_path)
 
-    #trainer.save_checkpoint("./models/tubevit_ucf101.ckpt")
 
 
 

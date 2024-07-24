@@ -27,6 +27,11 @@ class ConvertToFloat32(object):
     def __call__(self, clip):
         return torch.from_numpy(clip).to(torch.float32) 
     
+
+class ConvertToFloat64(object):
+    def __call__(self, clip):
+        return torch.from_numpy(clip).to(torch.float64) 
+    
 class sample_frames():
     def __init__(self, nth):
         self.nth = nth

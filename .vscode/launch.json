@@ -9,8 +9,13 @@
                 "console": "integratedTerminal",
                 "args": ["-r", "/data2/fhuemer/etri/masked_depthmaps",
                          "-m", "150",
-                        "--presample", "2",
-                        "--strides", "((12, 32, 32),(64, 16, 16))"],
+                         "--presample", "2",
+                         "--strides", "((12, 32, 32),(64, 16, 16))",
+                         "--use_pretrained_conv",
+                         //"--remove_background", false,
+                         "--use_min_max", 
+                         "--checkpoint_path", "/caa/Homes01/fhuemer/models/Tube_ViT/scripts/model_checkpoints/epoch=5-step=3552.ckpt",
+                        ],
                 "env": {
                     "CUDA_VISIBLE_DEVICES": "6"
                 }
