@@ -1,0 +1,48 @@
+# config.yaml
+trainer:
+  save_checkpoint_path: './model_checkpoints/'
+  load_checkpoint_path: Null
+
+torch:
+  precision: 'medium'
+
+data_loader:
+  batch_size: 16
+  num_workers: 4
+
+model:
+  max_epochs: 10
+  hidden_dim: 768 #//4
+  mlp_dim: 3072 #//4
+  num_layers: 16
+  num_heads: 16
+  output_size: 10
+  learning_rate: 0.001
+  weight_decay: 0.001
+  strides: [[12, 32, 32],[64, 16, 16]]
+
+ETRI_dataset:
+  max_number_frames: 150
+  remove_background: False
+  single_camera: True
+  elders_only: True
+
+transforms:
+  train:
+    # - type: min_max_normalization
+    #   scale_up: True
+    - type: ConvertToFloat32
+    - type: PermuteDimensions
+      order: [3, 0, 1, 2]
+    - type: repeat_color_channel
+    - type: sample_frames
+      nth: 4
+  test:
+    - type: min_max_normalization
+      scale_up: True
+    - type: ConvertToFloat32
+    - type: PermuteDimensions
+      order: [3, 0, 1, 2]
+    - type: repeat_color_channel
+    - type: sample_frames
+      nth: 4
