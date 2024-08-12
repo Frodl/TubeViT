@@ -6,6 +6,7 @@ from torchvision import transforms
 from PIL import Image
 import numpy as np
 import math
+import zipfile
 
 
 # train = 2/3
@@ -38,6 +39,7 @@ class ETRIDataset(Dataset):
             "clip_lengths": [],
             "filenames": [],
             "labels": [],}
+        self.corrupted_files = []
 
 
         #walk through root_dir and create list of images and labels
@@ -107,7 +109,9 @@ class ETRIDataset(Dataset):
         clip_path = self.clips[idx]
         clip_path = os.path.join(clip_path, os.path.basename(clip_path) + ".npz")
         label = self.labels[idx]
+        
         clip = np.load(clip_path)
+            
         #extracting the array from the npz file
         clip = clip.f.arr_0
 

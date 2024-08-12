@@ -7,17 +7,11 @@
                 "request": "launch",
                 "program": "${workspaceFolder}/scripts/train_etri.py",
                 "console": "integratedTerminal",
-                "args": ["-r", "/data2/fhuemer/etri/masked_depthmaps",
-                         "-m", "150",
-                         "--presample", "2",
-                         "--strides", "((12, 32, 32),(64, 16, 16))",
-                         "--use_pretrained_conv",
-                         //"--remove_background", false,
-                         "--use_min_max", 
-                         "--checkpoint_path", "/caa/Homes01/fhuemer/models/Tube_ViT/scripts/model_checkpoints/epoch=5-step=3552.ckpt",
-                        ],
+                "args": ["-r", "/data/fhuemer/etri/masked_depthmaps",
+                        "--config", "${workspaceFolder}/config_debug.yaml"],
                 "env": {
-                    "CUDA_VISIBLE_DEVICES": "6"
+                    "CUDA_VISIBLE_DEVICES": "0",
+                    "WANDB__SERVICE_WAIT": "90"
                 }
             },
         {
@@ -26,10 +20,10 @@
             "request": "launch",
             "program": "${workspaceFolder}/scripts/train.py",
             "console": "integratedTerminal",
-            "args": ["--dataset-root", "/data2/fhuemer/UCF101/UCF-101",
-                     "--annotation-path", "/data2/fhuemer/UCF101/ucfTrainTestlist"],
+            "args": ["--dataset-root", "/data/fhuemer/UCF101/UCF-101",
+                     "--annotation-path", "/data/fhuemer/UCF101/ucfTrainTestlist"],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "6"
+                "CUDA_VISIBLE_DEVICES": "0"
             }
         }
     ]
