@@ -20,7 +20,7 @@ model:
   learning_rate: 0.001
   weight_decay: 0.001
   kernel_sizes: [[1, 16, 16]]
-  strides: [[2, 16, 16]]
+  strides: [[1, 32, 32]]
   offsets: [[0, 0, 0]]
   
   use_pretrained: False
@@ -28,7 +28,7 @@ model:
 
 
 ETRI_dataset:
-  max_number_frames: 500
+  max_number_frames: 250
   remove_background: False
   single_camera: True
   elders_only: True
@@ -36,19 +36,19 @@ ETRI_dataset:
 transforms:
   train:
     - type: min_max_normalization
-      scale_up: True
+      scale_up: False
     - type: ConvertToFloat32
     - type: PermuteDimensions
       order: [3, 0, 1, 2]
     - type: repeat_color_channel
     - type: sample_frames
-      nth: 16
+      nth: 64
   test:
     - type: min_max_normalization
-      scale_up: True
+      scale_up: False
     - type: ConvertToFloat32
     - type: PermuteDimensions
       order: [3, 0, 1, 2]
     - type: repeat_color_channel
     - type: sample_frames
-      nth: 16
+      nth: 64

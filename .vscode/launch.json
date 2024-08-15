@@ -1,19 +1,31 @@
     {
         "version": "0.2.0",
         "configurations": [ 
-            {
-                "name": "train_etri", 
-                "type": "debugpy",
-                "request": "launch",
-                "program": "${workspaceFolder}/scripts/train_etri.py",
-                "console": "integratedTerminal",
-                "args": ["-r", "/data/fhuemer/etri/masked_depthmaps",
-                        "--config", "${workspaceFolder}/config_debug.yaml"],
-                "env": {
-                    "CUDA_VISIBLE_DEVICES": "0",
-                    "WANDB__SERVICE_WAIT": "90"
-                }
-            },
+        {
+            "name": "train_etri", 
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/train_etri.py",
+            "console": "integratedTerminal",
+            "args": ["-r", "/data/fhuemer/etri/masked_depthmaps",
+                    "--config", "${workspaceFolder}/config_1616_tube.yaml"],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "1",
+                "WANDB__SERVICE_WAIT": "90"
+            }
+        },
+        {
+            "name": "config_single_tube", 
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/train_etri.py",
+            "console": "integratedTerminal",
+            "args": ["-r", "/data/fhuemer/etri/masked_depthmaps",
+                     "--config", "${workspaceFolder}/config_single_tube.yaml"],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "1"
+            }
+        },
         {
             "name": "Python Debugger: Current File", 
             "type": "debugpy",

@@ -314,6 +314,7 @@ class TubeViTLightningModule(pl.LightningModule):
         self.lr = lr
         self.loss_func = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
         self.example_input_array = Tensor(1, *video_shape)
+        self.already_printed = False
 
         #TODO load weights
         weight_path = None
@@ -328,6 +329,10 @@ class TubeViTLightningModule(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         y_hat = self.forward(x)
+        if not self.already_printed:
+            print("x shape", x.shape)
+            self.already_printed = True
+
 
         loss = self.loss_func(y_hat, y)
         y_pred = torch.softmax(y_hat, dim=-1)
