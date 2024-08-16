@@ -7,25 +7,12 @@
                 "request": "launch",
                 "program": "${workspaceFolder}/scripts/train_msr.py",
                 "console": "integratedTerminal",
-                "args": ["-r", "/data2/fhuemer/MSRActivity3D/data",
-                         "-m", "150",
-                        "--presample", "2",
-                        "--strides", "((12, 32, 32),(64, 16, 16))"],
+            "args": ["-r", "/data/fhuemer/etri/masked_depthmaps",
+                    "--config", "${workspaceFolder}/config_1616_tube.yaml"],
                 "env": {
-                    "CUDA_VISIBLE_DEVICES": "2"
+                    "CUDA_VISIBLE_DEVICES": "2",
+                    "WANDB__SERVICE_WAIT": "90"
                 }
-            },
-        {
-            "name": "Python Debugger: Current File", 
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/scripts/train.py",
-            "console": "integratedTerminal",
-            "args": ["--dataset-root", "/data2/fhuemer/UCF101/UCF-101",
-                     "--annotation-path", "/data2/fhuemer/UCF101/ucfTrainTestlist"],
-            "env": {
-                "CUDA_VISIBLE_DEVICES": "0"
             }
-        }
     ]
 }

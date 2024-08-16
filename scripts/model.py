@@ -147,7 +147,7 @@ class TubeViT(nn.Module):
         hidden_dim: int,
         mlp_dim: int,
         kernel_sizes: List[tuple[int, int, int]],
-        strides: tuple[tuple],
+        strides: List[tuple[int, int, int]],
         offsets: List[tuple[int, int, int]],
         dropout: float = 0.0,
         attention_dropout: float = 0.0,
@@ -279,26 +279,17 @@ class TubeViTLightningModule(pl.LightningModule):
         dropout: float = 0.0,
         attention_dropout: float = 0.0,
         kernel_sizes=(            
-            #(8, 8, 8),
-            (16, 4, 4),
-            #(4, 12, 12),
-            (1, 16, 16)),
+            (8, 8, 8),
+        ),
         strides = (
-            #(16, 32, 32),
-            (12, 32, 32),
-            #(16, 32, 32),
-            (64, 16, 16),
+            (16, 32, 32),
         ),
         offsets = (
-            #(0, 0, 0),
-            (4, 8, 8),
-            #(0, 16, 16),
             (0, 0, 0),
         ),
         use_pretrained=False,
         use_pretrained_conv=False,
         **kwargs,
-
     ):
 
         self.save_hyperparameters()
@@ -317,11 +308,13 @@ class TubeViTLightningModule(pl.LightningModule):
             strides=strides,
             offsets=offsets,
             use_pretrained=use_pretrained,
+            use_pretrained_conv=use_pretrained_conv
         )
 
         self.lr = lr
         self.loss_func = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
         self.example_input_array = Tensor(1, *video_shape)
+        self.already_printed = False
 
         #TODO load weights
         weight_path = None
@@ -336,18 +329,17 @@ class TubeViTLightningModule(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         y_hat = self.forward(x)
+        if not self.already_printed:
+            print("x shape", x.shape)
+            self.already_printed = True
+
 
         loss = self.loss_func(y_hat, y)
-
         y_pred = torch.softmax(y_hat, dim=-1)
 
-
-
-        # Logging to TensorBoard by default
         self.log("train_loss", loss, prog_bar=True)
         self.log("train_acc", accuracy(y_pred, y, task="multiclass", num_classes=self.num_classes), prog_bar=True)
         self.log("train_f1", f1_score(y_pred, y, task="multiclass", num_classes=self.num_classes), prog_bar=True)
-
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -358,7 +350,7 @@ class TubeViTLightningModule(pl.LightningModule):
 
         y_pred = torch.softmax(y_hat, dim=-1)
 
-        # Logging to TensorBoard by default
+  
         self.log("val_loss", loss, prog_bar=True)
         self.log("val_acc", accuracy(y_pred, y, task="multiclass", num_classes=self.num_classes), prog_bar=True)
         self.log("val_f1", f1_score(y_pred, y, task="multiclass", num_classes=self.num_classes), prog_bar=True)

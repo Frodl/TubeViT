@@ -1,9 +1,12 @@
 print("Dont forget to set CUDA_VISIBLE_DEVICES")
-from model import TubeViTLightningModule
 import os
+
+cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES")
+print(f"CUDA_VISIBLE_DEVICES: {cuda_visible}")
 import pickle
 import inspect
 
+from model import TubeViTLightningModule
 import click
 import lightning.pytorch as pl
 import matplotlib.pyplot as plt
@@ -14,11 +17,13 @@ from torchvision.transforms import transforms as T
 from torchvision.transforms._transforms_video import ToTensorVideo
 import torch
 from mrs_dataloaders import MRSActivityDataset
-from custom_transformations import repeat_color_channel, min_max_normalization, ConvertToFloat32, sample_frames, PermuteDimensions
+from custom_transformations import repeat_color_channel, min_max_normalization, ConvertToFloat32, sample_frames, PermuteDimensions,ConvertToUint8, ConvertToFloat64
 from torchvision.models import ViT_B_16_Weights
 from torch.nn import functional as F
+from datetime import datetime
 
 
+import yaml
 import ast
 import wandb
 
@@ -27,171 +32,136 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 
 @click.command()
 @click.option("-r", "--dataset-root", type=click.Path(exists=True), required=True, help="path to dataset.")
-
-
-@click.option("-nc", "--num-classes", type=int, default=55, help="num of classes of dataset.")
-@click.option("-b", "--batch-size", type=int, default=8, help="batch size.")
-@click.option("-m", "--max_number_frames", type=int, default=150, help="frame per clip.")
-@click.option("-v", "--video-size", type=click.Tuple([int, int]), default=(512, 424), help="Height and width of image.")
-@click.option("-s", "--presample", type=int, default=4, help="pre sample frames from video")
-@click.option("--strides", help="sampeling for tubes")
-@click.option("--max-epochs", type=int, default=10, help="max epochs.")
-@click.option("--num_workers", type=int, default=0, help="num workers.")
+@click.option("--config", type=click.Path(exists=True), help="path to config file.")
+@click.option("-nc", "--num-classes", type=int, default=16, help="num of classes of dataset.")
+@click.option("-v", "--video-size", type=click.Tuple([int, int]), default=(320, 240), help="Height and width of image.")
 @click.option("--fast-dev-run", type=bool, is_flag=True, show_default=True, default=False)
 @click.option("--seed", type=int, default=42, help="random seed.")
-@click.option("--preview-video", type=bool, is_flag=True, show_default=True, default=False, help="Show input video")
-@click.option("--use_pretrained", type=bool, is_flag=True, show_default=True, default=False, help="Whether to use pretrained encoder")
-@click.option("--use_pretrained_conv", type=bool, is_flag=True, show_default=True, default=False, help="Whether to use pretrained encoder")
 
 def main(
     dataset_root,
     num_classes,
-    batch_size,
     video_size,
-    presample,
-    strides,
-    max_epochs,
-    num_workers,
     fast_dev_run,
     seed,
-    preview_video,
-    max_number_frames,
-    use_pretrained,
-    use_pretrained_conv,
+    config,
 ):
-    pl.seed_everything(seed)
+    with open(config, 'r') as file:
+        config = yaml.safe_load(file)
 
-    if strides is not None:
-        strides = ast.literal_eval(strides)
 
-    train_transform = T.Compose(
-        [   min_max_normalization(), # also transforms to float64
-            ConvertToFloat32(), # reduce to float32 in order to save memory
-            PermuteDimensions((3, 0, 1, 2)),  # from (T, H, W, C) to (C, T, H, W)
-            repeat_color_channel(), 
-            sample_frames(nth=presample)
-        ]
-    )
+    torch.set_float32_matmul_precision(config["torch"]["precision"])
+
+    transformation_mapping = {
+        'min_max_normalization': min_max_normalization,
+        'repeat_color_channel': repeat_color_channel,
+        'ConvertToUint8': ConvertToUint8,
+        'ConvertToFloat32': ConvertToFloat32,
+        'ConvertToFloat64': ConvertToFloat64,
+        'sample_frames': sample_frames,
+        'PermuteDimensions': PermuteDimensions,
+    }
+
+    def compose_transformations(transformations):
+        applied_transformations = []
+        for transform in transformations:
+            transform_type = transform.pop('type')
+            if transform_type in transformation_mapping:
+                transform_function = transformation_mapping[transform_type]
+                applied_transformations.append(transform_function(**transform))
+            else:
+                raise ValueError(f"Transformation {transform_type} not found.")
+
+        composed_transform = T.Compose(applied_transformations)
+        return composed_transform
     
+    train_transform = compose_transformations(config['transforms']['train'])
+    test_transform = compose_transformations(config['transforms']['test'])
 
-    test_transform = T.Compose(
-        [   min_max_normalization(),
-            ConvertToFloat32(), 
-            PermuteDimensions((3, 0, 1, 2)),  # from (T, H, W, C) to (C, T, H, W)
-            repeat_color_channel(), 
-            sample_frames(nth=presample)
-        ]
-    )
 
     train_set =  MRSActivityDataset(
         root_dir=dataset_root,
         mode = "train",
+        remove_background=config["ETRI_dataset"]["remove_background"],
         transform=train_transform,
-        get_metadata=True,
-        max_number_frames = max_number_frames,
+        single_camera=config["ETRI_dataset"]["single_camera"],
+        elders_only=config["ETRI_dataset"]["elders_only"],
+        max_number_frames = config["ETRI_dataset"]["max_number_frames"],
     )
-
-
 
     val_set =  MRSActivityDataset(
         root_dir=dataset_root,
         mode = "val",
+        remove_background=config["ETRI_dataset"]["remove_background"],
         transform=test_transform,
-        max_number_frames = max_number_frames,
+        single_camera=config["ETRI_dataset"]["single_camera"],
+        elders_only=config["ETRI_dataset"]["elders_only"],
+        max_number_frames = config["ETRI_dataset"]["max_number_frames"],
     )
 
     train_dataloader = DataLoader(
         train_set,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        shuffle=True,
+        batch_size=config["data_loader"]["batch_size"],
+        num_workers=config["data_loader"]["num_workers"],
+        shuffle=False,
         drop_last=True,
         pin_memory=True,
     )
 
     val_dataloader = DataLoader(
         val_set,
-        batch_size=batch_size,
-        num_workers=num_workers,
+        batch_size=config["data_loader"]["batch_size"],
+        num_workers=config["data_loader"]["num_workers"],
         shuffle=False,
         drop_last=True,
         pin_memory=True,
     )
 
-    x, y = next(iter(train_dataloader))
-    print(x.shape)
-
-    hidden_dim=768#//4
-    mlp_dim=3072#//4
+    x, _ = next(iter(train_dataloader))
 
     model = TubeViTLightningModule(
         num_classes=num_classes,
         video_shape=x.shape[1:],
-        num_layers=12,
-        num_heads=12,
-        hidden_dim=hidden_dim,
-        mlp_dim=mlp_dim,
-        lr=1e-4,
-        weight_decay=0.001,
+        num_layers=config["model"]["num_layers"],
+        num_heads=config["model"]["num_heads"],
+        hidden_dim=config["model"]["hidden_dim"],
+        mlp_dim=config["model"]["mlp_dim"],
+        lr=config["model"]["learning_rate"],
+        weight_decay=config["model"]["weight_decay"],
         weight_path=os.path.join("..","saved_weights","nc200_3color_channels.pt"),
-        max_epochs=max_epochs,
-        strides=strides,
-        use_pretrained=use_pretrained,
-        use_pretrained_conv=use_pretrained_conv,
+        max_epochs=config["model"]["max_epochs"],
+        kernel_sizes=config["model"]["kernel_sizes"],
+        strides=config["model"]["strides"],
+        offsets=config["model"]["offsets"],
+        use_pretrained=config["model"]["use_pretrained"],
+        use_pretrained_conv=config["model"]["use_pretrained_conv"],
     )
 
-    #get dictionary of arguments for name of wandb run
-    frame = inspect.currentframe()
-    args, _, _, values = inspect.getargvalues(frame)
-    arguments_dict = {arg: values[arg] for arg in args}
+    #get current date and hour
+    current_date = datetime.now().strftime("%d-%m-%Y_%H")
 
     wandb_logger = WandbLogger(
-        project="sparse_tubes_msr", 
-        name=f"TubeViT_minmaxscaling_no_scaleup_{batch_size}_{max_number_frames}_{presample}_{max_epochs}_{num_workers}_{hidden_dim}_{mlp_dim}_{use_pretrained}_{use_pretrained_conv}",
-        config=arguments_dict,)
+        project="sparse_tubes", 
+        name=f"TubeViT_{current_date}",
+        config=config,)
 
     callbacks = [
         pl.callbacks.LearningRateMonitor(logging_interval="epoch"),
         ModelCheckpoint(
             monitor='val_loss',
             mode='min',
-            dirpath='./model_checkpoints/',  # Specify the directory
+            dirpath=config["trainer"]["save_checkpoint_path"],  # Specify the directory
         )
     ]
 
     trainer = pl.Trainer(
-        max_epochs=max_epochs,
+        max_epochs=config["model"]["max_epochs"],
         accelerator="auto",
         fast_dev_run=fast_dev_run,
         logger=wandb_logger,
         callbacks=callbacks,
     )
-    trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
-
-    #trainer.save_checkpoint("./models/tubevit_ucf101.ckpt")
-
-
-
-def convert_conv_weight(model):
-    weights = ViT_B_16_Weights.DEFAULT.get_state_dict(progress=True)
-
-    # inflated vit path convolution layer weight
-    conv_proj_weight = weights["conv_proj.weight"]
-    conv_proj_weight = F.interpolate(conv_proj_weight, (8, 8), mode="bilinear")
-    conv_proj_weight = torch.unsqueeze(conv_proj_weight, dim=2)
-    conv_proj_weight = conv_proj_weight.repeat(1, 1, 8, 1, 1)
-    conv_proj_weight = conv_proj_weight / 8.0
-
-    # remove missmatch parameters
-    weights.pop("encoder.pos_embedding")
-    weights.pop("heads.head.weight")
-    weights.pop("heads.head.bias")
-
-    model.load_state_dict(weights, strict=False)
-    model.sparse_tubes_tokenizer.conv_proj_weight = torch.nn.Parameter(conv_proj_weight, requires_grad=True)
-
-    return model
-
+    trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader,ckpt_path=config["trainer"]["load_checkpoint_path"])
 
 
 if __name__ == "__main__":
