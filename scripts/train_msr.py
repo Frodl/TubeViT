@@ -34,7 +34,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 @click.option("-r", "--dataset-root", type=click.Path(exists=True), required=True, help="path to dataset.")
 @click.option("--config", type=click.Path(exists=True), help="path to config file.")
 @click.option("-nc", "--num-classes", type=int, default=16, help="num of classes of dataset.")
-@click.option("-v", "--video-size", type=click.Tuple([int, int]), default=(320, 240), help="Height and width of image.")
+@click.option("-v", "--video-size", type=click.Tuple([int, int]), default=(640, 480), help="Height and width of image.")
 @click.option("--fast-dev-run", type=bool, is_flag=True, show_default=True, default=False)
 @click.option("--seed", type=int, default=42, help="random seed.")
 
@@ -46,6 +46,7 @@ def main(
     seed,
     config,
 ):
+    config_path = config
     with open(config, 'r') as file:
         config = yaml.safe_load(file)
 
@@ -84,8 +85,6 @@ def main(
         mode = "train",
         remove_background=config["ETRI_dataset"]["remove_background"],
         transform=train_transform,
-        single_camera=config["ETRI_dataset"]["single_camera"],
-        elders_only=config["ETRI_dataset"]["elders_only"],
         max_number_frames = config["ETRI_dataset"]["max_number_frames"],
     )
 
@@ -94,8 +93,6 @@ def main(
         mode = "val",
         remove_background=config["ETRI_dataset"]["remove_background"],
         transform=test_transform,
-        single_camera=config["ETRI_dataset"]["single_camera"],
-        elders_only=config["ETRI_dataset"]["elders_only"],
         max_number_frames = config["ETRI_dataset"]["max_number_frames"],
     )
 
@@ -135,14 +132,15 @@ def main(
         offsets=config["model"]["offsets"],
         use_pretrained=config["model"]["use_pretrained"],
         use_pretrained_conv=config["model"]["use_pretrained_conv"],
+        freeze_first_layers=config["model"]["freeze_first_layers"],
     )
 
     #get current date and hour
     current_date = datetime.now().strftime("%d-%m-%Y_%H")
 
     wandb_logger = WandbLogger(
-        project="sparse_tubes", 
-        name=f"TubeViT_{current_date}",
+        project="sparse_tubes_msr", 
+        name=f"Tube_{config_path}_{current_date}",
         config=config,)
 
     callbacks = [

@@ -7,11 +7,12 @@
                 "request": "launch",
                 "program": "${workspaceFolder}/scripts/train_msr.py",
                 "console": "integratedTerminal",
-            "args": ["-r", "/data/fhuemer/etri/masked_depthmaps",
-                    "--config", "${workspaceFolder}/config_1616_tube.yaml"],
+            "args": ["-r", "/data/fhuemer/MSRActivity3D/data",
+                    "--config", "config/888_scaleup_1616_pretrained.yaml"],
                 "env": {
                     "CUDA_VISIBLE_DEVICES": "2",
-                    "WANDB__SERVICE_WAIT": "90"
+                    "WANDB__SERVICE_WAIT": "90",
+                    "CUDA_LAUNCH_BLOCKING": "1",
                 }
             }
     ]

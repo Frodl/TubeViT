@@ -6,14 +6,15 @@ from torchvision import transforms
 from PIL import Image
 import numpy as np
 import math
-
+import cv2
 # train = 2/3
 # val = 1/6
 # test = 1/6
 
 class MRSActivityDataset(Dataset):
 
-    def __init__(self, root_dir,max_number_frames, mode = "train" ,transform=None, eval_mode = "cs", get_metadata = False) -> None:
+    def __init__(self, root_dir,max_number_frames, remove_background = False,
+                  mode = "train" ,transform=None, eval_mode = "cs", get_metadata = False) -> None:
         self.root_dir = root_dir
         self.transform = transform
         self.mode = mode
@@ -28,7 +29,7 @@ class MRSActivityDataset(Dataset):
             "clip_lengths": [],
             "filenames": [],
             "labels": [],}
-
+        self.remove_background = remove_background
         self.subject_selector()
 
         #walk through root_dir and create list of images and labels
@@ -36,9 +37,9 @@ class MRSActivityDataset(Dataset):
             for file in files:
                 naming_list = file.split('_')
 
-                action = int(naming_list[0][1:])
-                subject = int(naming_list[1][1:])
-                edition = int(naming_list[2][1:])
+                action = int(naming_list[0][1:])-1
+                subject = int(naming_list[1][1:])-1
+                edition = int(naming_list[2][1:])-1
 
                 self.clips.append(os.path.join(root, file))
                 self.labels.append(action)
@@ -54,6 +55,8 @@ class MRSActivityDataset(Dataset):
         print("#########################################")
         print(len(self.clips))
         print("#########################################")
+
+        print(f"Mode: {self.mode}, Chosen Subjects: {self.chosen_subjects}")
         # print min max and quartiels of clip lengths
         if self.get_metadata:
             print("min clip length: ", np.min(self.meta_data["clip_lengths"]))
@@ -94,7 +97,7 @@ class MRSActivityDataset(Dataset):
         # returns sample and label for index 
         clip_path = self.clips[idx]
         label = self.labels[idx]
-        clip = load_depth_map(clip_path)
+        clip = self.load_depth_map(clip_path)
 
         #add chanel dimension
         clip = np.expand_dims(clip, axis=3)
@@ -108,37 +111,48 @@ class MRSActivityDataset(Dataset):
 
         return clip, label 
 
-def read_header(file):
-    # Read the number of frames
-    num_frames = np.frombuffer(file.read(4), dtype=np.uint32)[0]
-    # Read the dimensions of the frames
-    dims = np.frombuffer(file.read(8), dtype=np.uint32)
-    return dims, num_frames
+    def load_depth_map(self, depth_file, resize='VGA'):
+        ''' Extracts depth images and masks from the MSR Daily Activites dataset
+        ---Parameters---
+        depth_file : filename for set of depth images (.bin file)
+        '''
 
-def load_depth_map(path):
-    with open(path, 'rb') as file:
-        # Read header
-        dims, num_frames = read_header(file)
-        # Read the rest of the file data as uint32
-        file_data = np.fromfile(file, dtype=np.uint32)
-    
-    # Convert to depth map format
-    depth_count_per_map = np.prod(dims)
-    depth_maps = []
+        file_ = open(depth_file, 'rb')
 
-    for i in range(num_frames):
-        current_depth_data = file_data[:depth_count_per_map]
-        file_data = file_data[depth_count_per_map:]
-        depth_map = current_depth_data.reshape((dims[1], dims[0])).T
-        depth_maps.append(depth_map)
+        ''' Get header info '''
+        frames = np.frombuffer(file_.read(4), dtype=np.int32)[0]
+        cols = np.frombuffer(file_.read(4), dtype=np.int32)[0]
+        rows = np.frombuffer(file_.read(4), dtype=np.int32)[0]
 
-    depth_maps = np.stack(depth_maps, axis=0)
-    return depth_maps
+        ''' Get depth/mask image data '''
+        data = file_.read()
 
+        '''
+        Depth images and mask images are stored together per row.
+        Thus we need to extract each row of size n_cols+n_rows
+        '''
+        dt = np.dtype([('depth', np.int32, cols), ('mask', np.uint8, cols)])
 
+        ''' raw -> usable images '''
+        frame_data = np.frombuffer(data, dtype=dt)
+        depthIms = frame_data['depth'].astype(np.uint16).reshape([frames, rows, cols])
+        maskIms = frame_data['mask'].astype(np.uint16).reshape([frames, rows, cols])
 
 
+        depthIms = np.stack([cv2.resize(depthIms[d,:,:], (640,480)) for d in range(len(depthIms))],0)
+        maskIms = np.stack([cv2.resize(maskIms[d,:,:], (640,480)) for d in range(len(maskIms))],0)
 
-       
+        if self.remove_background:
+            binary_mask = (maskIms > 0).astype(np.uint16)
+            depthIms = depthIms * binary_mask	
+        depthIms = np.flip(depthIms, 1)
         
+        return depthIms
+
+
+
+
+
+        
+            
 
