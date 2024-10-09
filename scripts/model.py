@@ -33,6 +33,7 @@ class Encoder(nn.Module):
         attention_dropout: float,
         use_pretrained=False,
         norm_layer: Callable[..., nn.Module] = partial(nn.LayerNorm, eps=1e-6),
+        freze_first_layers: int = 0,
     ):
         super().__init__()
         self.dropout = nn.Dropout(dropout)
@@ -41,6 +42,9 @@ class Encoder(nn.Module):
             pre_trained_vit = vit_b_16(pretrained=True)
             for i in range(num_layers):
                 layers[f"encoder_layer_{i}"] = pre_trained_vit.encoder.layers[i]
+                if i < freze_first_layers:
+                    for param in layers[f"encoder_layer_{i}"].parameters():
+                        param.requires_grad = False
         else:
             for i in range(num_layers):
                 layers[f"encoder_layer_{i}"] = EncoderBlock(
@@ -73,7 +77,8 @@ class SparseTubesTokenizer(nn.Module):
         self.offsets = offsets
 
         self.conv_proj_weight = nn.Parameter(
-            torch.empty((self.hidden_dim, 3, *self.kernel_sizes[0])).normal_(), requires_grad=True
+            torch.empty((self.hidden_dim, 3, *self.kernel_sizes[0])).normal_(), 
+            requires_grad=True
         )
 
         self.register_parameter("conv_proj_weight", self.conv_proj_weight)
@@ -154,6 +159,7 @@ class TubeViT(nn.Module):
         representation_size=None,
         use_pretrained=False,
         use_pretrained_conv=False,
+        freeze_first_layers=0,
     ):
         super(TubeViT, self).__init__()
         self.video_shape = np.array(video_shape)  # CTHW
@@ -186,6 +192,8 @@ class TubeViT(nn.Module):
             mlp_dim=mlp_dim,
             dropout=dropout,
             attention_dropout=attention_dropout,
+            use_pretrained=self.use_pretrained,
+            freze_first_layers=freeze_first_layers,
         )
 
         self.attention_pooling = SelfAttentionPooling(self.hidden_dim)
@@ -289,6 +297,7 @@ class TubeViTLightningModule(pl.LightningModule):
         ),
         use_pretrained=False,
         use_pretrained_conv=False,
+        freeze_first_layers=0,
         **kwargs,
     ):
 
@@ -308,7 +317,8 @@ class TubeViTLightningModule(pl.LightningModule):
             strides=strides,
             offsets=offsets,
             use_pretrained=use_pretrained,
-            use_pretrained_conv=use_pretrained_conv
+            use_pretrained_conv=use_pretrained_conv,
+            freeze_first_layers=freeze_first_layers,
         )
 
         self.lr = lr

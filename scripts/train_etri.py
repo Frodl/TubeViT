@@ -21,6 +21,11 @@ from custom_transformations import repeat_color_channel, min_max_normalization, 
 from custom_transformations import ConvertToFloat64, sample_frames, PermuteDimensions
 from torchvision.models import ViT_B_16_Weights
 from torch.nn import functional as F
+from datetime import datetime
+
+
+import yaml
+import ast
 import wandb
 
 #from pytorch_lightning.callbacks import ModelCheckpoint
@@ -46,6 +51,7 @@ def main(
     seed,
     config,
 ):
+    config_path = config
     with open(config, 'r') as file:
         config = yaml.safe_load(file)
 
@@ -137,6 +143,7 @@ def main(
         offsets=config["model"]["offsets"],
         use_pretrained=config["model"]["use_pretrained"],
         use_pretrained_conv=config["model"]["use_pretrained_conv"],
+        freeze_first_layers=config["model"]["freeze_first_layers"],
     )
 
     #get current date and hour
@@ -144,7 +151,7 @@ def main(
 
     wandb_logger = WandbLogger(
         project="sparse_tubes", 
-        name=f"TubeViT_{current_date}",
+        name=f"Tube_{config_path}_{current_date}",
         config=config,)
 
     callbacks = [
@@ -152,7 +159,7 @@ def main(
         ModelCheckpoint(
             monitor='val_loss',
             mode='min',
-            dirpath=config["trainer"]["save_checkpoint_path"],  # Specify the directory
+            dirpath=os.path.join(config["trainer"]["save_checkpoint_path"], f"Tube_{config_path}_{current_date}"),  # Specify the directory
         )
     ]
 
