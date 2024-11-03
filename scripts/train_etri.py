@@ -92,6 +92,7 @@ def main(
         single_camera=config["ETRI_dataset"]["single_camera"],
         elders_only=config["ETRI_dataset"]["elders_only"],
         max_number_frames = config["ETRI_dataset"]["max_number_frames"],
+        dev_run=fast_dev_run,
     )
 
 
@@ -103,6 +104,7 @@ def main(
         single_camera=config["ETRI_dataset"]["single_camera"],
         elders_only=config["ETRI_dataset"]["elders_only"],
         max_number_frames = config["ETRI_dataset"]["max_number_frames"],
+        dev_run=fast_dev_run,
     )
 
     train_dataloader = DataLoader(
@@ -112,7 +114,7 @@ def main(
         shuffle=True,
         drop_last=True,
         pin_memory=True,
-        collate_fn=collate_fn
+        #collate_fn=collate_fn
     )
 
     val_dataloader = DataLoader(
@@ -122,7 +124,7 @@ def main(
         shuffle=False,
         drop_last=True,
         pin_memory=True,
-        collate_fn=collate_fn
+        #collate_fn=collate_fn
     )
 
     x, _ = next(iter(train_dataloader))
@@ -136,7 +138,6 @@ def main(
         mlp_dim=config["model"]["mlp_dim"],
         lr=config["model"]["learning_rate"],
         weight_decay=config["model"]["weight_decay"],
-        weight_path=os.path.join("..","saved_weights","nc200_3color_channels.pt"),
         max_epochs=config["model"]["max_epochs"],
         kernel_sizes=config["model"]["kernel_sizes"],
         strides=config["model"]["strides"],
@@ -162,14 +163,15 @@ def main(
             dirpath=os.path.join(config["trainer"]["save_checkpoint_path"], f"Tube_{config_path}_{current_date}"),  # Specify the directory
         )
     ]
+     
 
     trainer = pl.Trainer(
-        max_epochs=config["model"]["max_epochs"],
-        accelerator="auto",
-        fast_dev_run=fast_dev_run,
-        logger=wandb_logger,
-        callbacks=callbacks,
+    max_epochs=config["model"]["max_epochs"],
+    accelerator="auto",
+    logger=wandb_logger,
+    callbacks=callbacks,
     )
+
     trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader,ckpt_path=config["trainer"]["load_checkpoint_path"])
 
 
@@ -177,6 +179,7 @@ def collate_fn(batch):
     # Filter out `None` values
     batch = [b for b in batch if b is not None]
     return torch.utils.data.default_collate(batch)
+
 
 if __name__ == "__main__":
     main()     

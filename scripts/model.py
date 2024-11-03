@@ -349,7 +349,7 @@ class TubeViTLightningModule(pl.LightningModule):
 
         self.log("train_loss", loss, prog_bar=True)
         self.log("train_acc", accuracy(y_pred, y, task="multiclass", num_classes=self.num_classes), prog_bar=True)
-        self.log("train_f1", f1_score(y_pred, y, task="multiclass", num_classes=self.num_classes), prog_bar=True)
+        self.log("train_f1", f1_score(y_pred, y, task="multiclass", average='macro', num_classes=self.num_classes), prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -357,13 +357,11 @@ class TubeViTLightningModule(pl.LightningModule):
         y_hat = self(x)
 
         loss = self.loss_func(y_hat, y)
-
         y_pred = torch.softmax(y_hat, dim=-1)
 
-  
         self.log("val_loss", loss, prog_bar=True)
         self.log("val_acc", accuracy(y_pred, y, task="multiclass", num_classes=self.num_classes), prog_bar=True)
-        self.log("val_f1", f1_score(y_pred, y, task="multiclass", num_classes=self.num_classes), prog_bar=True)
+        self.log("val_f1",  f1_score(y_pred, y, task="multiclass", average='macro', num_classes=self.num_classes), prog_bar=True)
 
         return loss
 
@@ -386,3 +384,11 @@ class TubeViTLightningModule(pl.LightningModule):
         y_pred = torch.softmax(y_hat, dim=-1)
 
         return {"y": y, "y_pred": torch.argmax(y_pred, dim=-1), "y_prob": y_pred}
+    
+    #hook to initialize lr_scheduler on train start
+    def on_train_start(self):
+        #optimizer, lr_scheduler = self.configure_optimizers()
+        self.trainer.lr_scheduler_configs[0].scheduler.total_steps = self.max_epochs
+
+        #self.trainer.lr_schedulers = [{'scheduler': lr_scheduler, 'interval': 'step'}]
+

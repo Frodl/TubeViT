@@ -15,7 +15,10 @@ import zipfile
 
 class ETRIDataset(Dataset):
 
-    def __init__(self, root_dir,max_number_frames, mode = "train", remove_background = True ,transform=None, eval_mode = "cs", single_camera= False, elders_only = False, get_metadata = False):
+    def __init__(self, root_dir,max_number_frames, mode = "train",
+                 remove_background = True ,transform=None, eval_mode = "cs",
+                 single_camera= False, elders_only = False, get_metadata = False,
+                 dev_run = False,):
         """
         Args:
             root_dir (string): Directory with all the clips.
@@ -28,8 +31,7 @@ class ETRIDataset(Dataset):
         self.transform = transform
         self.mode = mode
         self.remove_background = remove_background
-        self.subject_selector()
-        self.labels =[]
+        self.labels = []
         self.clips = []
         self.room = []
         self.camera = []
@@ -40,6 +42,8 @@ class ETRIDataset(Dataset):
             "filenames": [],
             "labels": [],}
         self.corrupted_files = []
+        self.dev_run = dev_run
+        self.subject_selector()
 
 
         #walk through root_dir and create list of images and labels
@@ -87,10 +91,16 @@ class ETRIDataset(Dataset):
         if self.mode == "train": 
             #leave out every third subject
             self.chosen_subjects = [x for x in subjects if x % 3 != 0]
-        elif self.mode == "test":
-            self.chosen_subjects = subjects[2::6]
+            if self.dev_run:
+                print("dev run, only using 2 subjects!")
+                self.chosen_subjects = self.chosen_subjects[:2]
+        #elif self.mode == "test":
+            # self.chosen_subjects = subjects[2::6]
         elif self.mode == "val":
             self.chosen_subjects = subjects[5::6]
+            if self.dev_run:
+                self.chosen_subjects = self.chosen_subjects[2:4]
+
 
     def repeat_or_cutoff(self, clip):
         #repeat or cut off frames to max_number_frames
